@@ -6,43 +6,27 @@ st.set_page_config(page_title="NSE Pre-Market Dashboard", layout="wide")
 
 @st.cache_data(ttl=300)
 def fetch_nse_preopen():
-    url = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
+    url = "https://www1.nseindia.com/live_market/dynaContent/live_watch/pre_open/fo.json"
     headers = {
         "User-Agent": "Mozilla/5.0",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Accept": "application/json",
-        "Referer": "https://www.nseindia.com/market-data/pre-open-market-cm-and-emerge-market"
+        "Referer": "https://www1.nseindia.com/live_market/dynaContent/live_watch/pre_open/pre_open_market.htm"
     }
-    session = requests.Session()
 
+    session = requests.Session()
     try:
-        session.get("https://www.nseindia.com", headers=headers, timeout=10)
         response = session.get(url, headers=headers, timeout=10)
         data = response.json()
     except Exception as e:
         st.error(f"Failed to fetch data from NSE. Error: {e}")
         return pd.DataFrame()
 
-    records = data.get('data', [])
-    if not records:
-        st.warning("No data found in the response.")
-        return pd.DataFrame()
-
-    df = pd.DataFrame(records)
-    if "metadata" not in df.columns:
-        st.warning("Unexpected data format from NSE.")
-        return pd.DataFrame()
-
-    df = df[["metadata", "lastPrice", "pChange", "quantityTraded", "totalTradedValue"]]
-    df["Symbol"] = df["metadata"].apply(lambda x: x.get("symbol", "") if isinstance(x, dict) else "")
-    df["Name"] = df["metadata"].apply(lambda x: x.get("name", "") if isinstance(x, dict) else "")
-    df = df.drop(columns=["metadata"])
-    df.columns = ["Price", "% Change", "Volume", "Traded Value", "Symbol", "Name"]
+    rows = data.get("data", [])
+    df = pd.DataFrame(rows)
+    df = df[["symbol", "finalPrice", "perChange", "iVol_traded", "iValue"]]
+    df.columns = ["Symbol", "Price", "% Change", "Volume", "Traded Value"]
     df["% Change"] = pd.to_numeric(df["% Change"], errors='coerce')
     df = df.dropna(subset=["% Change"])
     return df
-
 # Load data
 df = fetch_nse_preopen()
 
