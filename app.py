@@ -1,49 +1,53 @@
 import streamlit as st
-import pandas as pd
 import requests
+import pandas as pd
 
-st.set_page_config(page_title="NSE Pre-Market Dashboard", layout="wide")
+st.set_page_config(page_title="NSE Pre-Open Market Viewer", layout="wide")
 
-@st.cache_data(ttl=300)
-def fetch_nse_preopen():
-    url = "https://www1.nseindia.com/live_market/dynaContent/live_watch/pre_open/fo.json"
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://www1.nseindia.com/live_market/dynaContent/live_watch/pre_open/pre_open_market.htm"
-    }
+st.title("NSE Pre-Open Market Viewer")
 
-    session = requests.Session()
+URL = "https://www.nseindia.com/api/market-data-pre-open?key=NIFTY"
+
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "Accept": "*/*",
+    "Referer": "https://www.nseindia.com/",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive"
+}
+
+@st.cache_data(ttl=60)
+def fetch_preopen_data():
     try:
-        response = session.get(url, headers=headers, timeout=10)
-        data = response.json()
+        response = requests.get(URL, headers=headers, timeout=10)
+        if response.status_code != 200:
+            st.error(f"Error fetching data. Status code: {response.status_code}")
+            return None
+
+        try:
+            data = response.json()
+        except ValueError:
+            st.error("Failed to fetch data from NSE. Empty or invalid JSON.")
+            return None
+
+        return data
+
     except Exception as e:
-        st.error(f"Failed to fetch data from NSE. Error: {e}")
-        return pd.DataFrame()
+        st.error(f"Request failed: {str(e)}")
+        return None
 
-    rows = data.get("data", [])
-    df = pd.DataFrame(rows)
-    df = df[["symbol", "finalPrice", "perChange", "iVol_traded", "iValue"]]
-    df.columns = ["Symbol", "Price", "% Change", "Volume", "Traded Value"]
-    df["% Change"] = pd.to_numeric(df["% Change"], errors='coerce')
-    df = df.dropna(subset=["% Change"])
-    return df
-# Load data
-df = fetch_nse_preopen()
+data = fetch_preopen_data()
 
-if not df.empty:
-    st.title("NSE Pre-Market Dashboard")
-    col1, col2, col3 = st.columns(3)
+if data and "data" in data:
+    records = data["data"]
+    df = pd.DataFrame(records)
 
-    with col1:
-        st.subheader("Top Gainers")
-        st.dataframe(df.sort_values("% Change", ascending=False).head(10), use_container_width=True)
-
-    with col2:
-        st.subheader("Top Losers")
-        st.dataframe(df.sort_values("% Change", ascending=True).head(10), use_container_width=True)
-
-    with col3:
-        st.subheader("Highest Volume")
-        st.dataframe(df.sort_values("Volume", ascending=False).head(10), use_container_width=True)
+    if not df.empty:
+        df = df[["metadata", "lastPrice", "priceBand", "finalQuantity", "iep"]]
+        df["symbol"] = df["metadata"].apply(lambda x: x.get("symbol") if isinstance(x, dict) else None)
+        df = df[["symbol", "lastPrice", "iep", "finalQuantity", "priceBand"]]
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.warning("Data fetched, but it's empty.")
 else:
-    st.error("No data available to display.")
+    st.warning("No data available to display.")
